@@ -15,19 +15,22 @@ relay_pins[3] = OutputDevice(23)
 
 
 def set_relay(id, set_on):
-    print("Setting relay {} {}".format(id, set_on))
-    if set_on:
+    if not set_on:  # active low
         relay_pins[id].on()
     else:
         relay_pins[id].off()
 
 
 def main():
+    bits = 0
     while True:
-        set_relay(0, True)
-        sleep(5)
-        set_relay(0, False)
-        sleep(5)
+        print('bits = {:04b}'.format(bits))
+        set_relay(0, True if bits & 1 else False)
+        set_relay(1, True if bits & 2 else False)
+        set_relay(2, True if bits & 4 else False)
+        set_relay(3, True if bits & 8 else False)
+        bits = (bits + 1) % 16
+        sleep(2)
 
 
 if __name__ == "__main__":
