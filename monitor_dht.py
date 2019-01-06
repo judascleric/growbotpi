@@ -1,38 +1,46 @@
-import json
+# judascleric 2019
+
 import time
-import paho.mqtt.client as mqtt
+
 import Adafruit_DHT as dht
 
-def main():
-    thingsboard_host = 'jester'
-    with open('/home/pi/thingsboard/token.txt') as f:
-        access_token = f.read().strip()
-    sensor_data = {'temperature': 0, 'humidity': 0}
-    next_reading = time.time() 
+class RingBuffer:
+    def __init__(self, size_max):
+        self.max = size_max
+        self.data = []
 
-    client = mqtt.Client()
-    client.username_pw_set(access_token)
-    client.connect(thingsboard_host, 1883, 60)
+    class __Full:
+        def append(self, x):
+            self.data[self.cur] = x
+            self.cur = (self.cur+1) % self.max
+        def get(self):
+            return self.data[self.cur:]+self.data[:self.cur]
 
-    client.loop_start()
+    def append(self, x):
+        self.data.append(x)
+        if len(self.data) == self.max:
+            self.cur = 0
+            self.__class__ = self.__Full
 
-    try:
-        while True:
+    def get(self):
+        return self.data
+
+
+class DHTMonitor():
+    def __init__(self):
+        self.sensor_data = RingBuffer(32000)
+        self.min_refresh_interval = 2.0 # seconds
+        self.last_reading = time.time() - self.min_refresh_interval
+
+    def read_sensor(self):
+        elapsed = time.time() - self.last_reading
+        if elapsed > self.min_refresh_interval:
             humidity,temperature = dht.read_retry(dht.AM2302, 4)
-            humidity = round(humidity, 2)
-            t_f = round(temperature * 9/5.0 + 32, 2)
-            print(u"Temperature: {:g}\u00b0C, Humidity: {:g}%".format(t_f, humidity))
-            sensor_data['temperature'] = t_f
-            sensor_data['humidity'] = humidity
-            client.publish('v1/devices/me/telemetry', json.dumps(sensor_data), 1)
-            time.sleep(2)
-    except KeyboardInterrupt:
-        pass
-
-    client.loop_stop()
-    client.disconnect()
-
-
-if __name__ == "__main__":
-  main()
+            self.last_reading = time.time()
+            data = {
+                'time': time.strftime('%Y-%m-%d %H:%M:%S', time.localtime()),
+                'temperature': round(temperature * 9/5.0 + 32, 2),
+                'humidity': round(humidity, 2),
+            }
+            self.sensor_data.append(data)
 
